@@ -373,7 +373,37 @@ async function loadVtIndex(progress) {
     return (_vtIndex = saved);
   }
 }
-export function forgetVtIndex() { _vtIndex = null; }
+export function forgetVtIndex() { _vtIndex = null; _brewFiles = null; }
+
+/* Homebrew/prerelease source id (lower-case) → its file in the local 5e.tools copy. */
+let _brewFiles = null;
+/**
+ * The URL of a homebrew or prerelease book in this server's 5e.tools copy, or null if there isn't one.
+ * Plutonium asks for this when an entry from a book it hasn't loaded yet is dropped; without it, it downloads
+ * the book from GitHub, which fails for some players (and is slower for everyone).
+ */
+export async function localBrewUrl(source) {
+  if (!source) return null;
+  if (!_brewFiles) {
+    const idx = await loadVtIndex();
+    const map = new Map();
+    if (idx?.rows) {
+      const K = Object.fromEntries(idx.keys.map((k, i) => [k, i]));
+      const val = (row, k) => { const v = row[K[k]]; return typeof v === "number" && idx.dict?.[k] ? idx.dict[k][v] : v; };
+      for (const row of idx.rows) {
+        const file = val(row, "f");
+        if (typeof file !== "string" || !/^(homebrew|prerelease)\//.test(file)) continue;
+        const src = String(val(row, "s") ?? "").toLowerCase();
+        if (src && !map.has(src)) map.set(src, file);
+      }
+    }
+    _brewFiles = map;
+  }
+  const file = _brewFiles.get(String(source).toLowerCase());
+  if (!file) return null;
+  const path = `${vtRoot()}/${file}`.split("/").map(encodeURIComponent).join("/");
+  return `${window.location.origin}${foundry.utils.getRoute(path)}`;
+}
 
 async function index5etools(progress) {
   const idx = await loadVtIndex(progress);

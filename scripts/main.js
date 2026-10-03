@@ -6,7 +6,7 @@
  * and world documents), plus your local 5e.tools copy through Plutonium. Drag anything onto
  * a character sheet, the canvas, the sidebar or a compendium.
  */
-import { MODULE_ID, getRecords, invalidate, dropPackCache, forgetVtIndex, vtRoot } from "./data.js";
+import { MODULE_ID, getRecords, invalidate, dropPackCache, forgetVtIndex, vtRoot, localBrewUrl } from "./data.js";
 import { CompendiumLibrary, configurePlutonium, plutoniumConfigured } from "./app.js";
 
 Hooks.once("init", () => {
@@ -52,8 +52,30 @@ for (const hook of ["createItem", "deleteItem", "createActor", "deleteActor", "u
   stale();
 });
 
+/**
+ * When a homebrew or prerelease entry is dropped, Plutonium loads its whole book first. If the book isn't
+ * loaded in that browser yet, it downloads it from GitHub — which fails for some players. Point that lookup
+ * at the book in this server's own 5e.tools copy instead, and only fall back to GitHub if it isn't there.
+ */
+function useLocalBrewForPlutonium() {
+  if (!game.modules.get("plutonium")?.active) return;
+  for (const util of [globalThis.BrewUtil2, globalThis.PrereleaseUtil]) {
+    if (!util || util.__compendiumLibraryLocal || typeof util.pGetSourceUrl !== "function") continue;
+    const original = util.pGetSourceUrl.bind(util);
+    util.pGetSourceUrl = async (source, ...rest) => {
+      try {
+        const url = await localBrewUrl(source);
+        if (url) return url;
+      } catch (e) { console.warn(`${MODULE_ID} | local homebrew lookup failed for ${source}`, e); }
+      return original(source, ...rest);
+    };
+    util.__compendiumLibraryLocal = true;
+  }
+}
+
 Hooks.once("ready", async () => {
   game.modules.get(MODULE_ID).api = { open: () => CompendiumLibrary.open(), getRecords, reload: () => { invalidate(); } };
+  useLocalBrewForPlutonium();
   // first run with Plutonium: offer to point it at the local 5e.tools copy
   if (game.user.isGM && game.modules.get("plutonium")?.active && !game.settings.get(MODULE_ID, "plutoniumDone") && !plutoniumConfigured()) {
     try {

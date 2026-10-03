@@ -212,7 +212,9 @@ export class CompendiumLibrary extends HAM {
 /** Settings that make Plutonium read the local 5e.tools copy in Data/5etools. */
 export function plutoniumSettings() {
   const root = vtRoot();
-  const base = `${window.location.origin}${foundry.utils.getRoute(`${root}/`)}`;
+  // Server-relative on purpose: Plutonium's config is shared by every client, and a full address such as
+  // http://localhost:30000/ only works on the machine that saved it.
+  const base = foundry.utils.getRoute(`${root}/`);
   return [
     ["dataSources", "baseSiteUrl", base],
     ["dataSources", "isNoLocalData", true],
@@ -223,6 +225,28 @@ export function plutoniumSettings() {
     ["import", "localImageDirectoryPath", root],
   ];
 }
+/**
+ * Earlier versions saved Plutonium's "Base Site URL" as a full address built from the GM's browser — usually
+ * http://localhost:30000/5etools/. Players' browsers then look for 5e.tools on their own computer and every
+ * import fails. Swap any full address that points at this server's own copy for the server-relative one.
+ * Returns true if it changed something.
+ */
+export function repairPlutoniumSiteUrl() {
+  const api = game.modules.get("plutonium")?.api;
+  if (!game.user.isGM || !api?.config) return false;
+  let cur;
+  try { cur = api.config.getValue("dataSources", "baseSiteUrl"); } catch { return false; }
+  if (typeof cur !== "string" || !/^https?:\/\//i.test(cur.trim())) return false;
+  let url;
+  try { url = new URL(cur.trim()); } catch { return false; }
+  const rel = foundry.utils.getRoute(`${vtRoot()}/`);
+  const norm = (p) => `${decodeURIComponent(p).replace(/\/+$/, "")}/`;
+  if (norm(url.pathname) !== norm(rel)) return false;                       // a different 5e.tools site: leave it alone
+  const local = ["localhost", "127.0.0.1", "[::1]", "::1", "0.0.0.0"].includes(url.hostname) || url.host === window.location.host;
+  if (!local) return false;
+  try { return api.config.setValue("dataSources", "baseSiteUrl", rel) !== false; } catch { return false; }
+}
+
 export function plutoniumConfigured() {
   const api = game.modules.get("plutonium")?.api;
   if (!api?.config) return false;

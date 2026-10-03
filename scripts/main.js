@@ -7,7 +7,7 @@
  * a character sheet, the canvas, the sidebar or a compendium.
  */
 import { MODULE_ID, getRecords, invalidate, dropPackCache, forgetVtIndex, vtRoot, localBrewUrl } from "./data.js";
-import { CompendiumLibrary, configurePlutonium, plutoniumConfigured } from "./app.js";
+import { CompendiumLibrary, configurePlutonium, plutoniumConfigured, repairPlutoniumSiteUrl } from "./app.js";
 
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "show5etools", {
@@ -76,6 +76,13 @@ function useLocalBrewForPlutonium() {
 Hooks.once("ready", async () => {
   game.modules.get(MODULE_ID).api = { open: () => CompendiumLibrary.open(), getRecords, reload: () => { invalidate(); } };
   useLocalBrewForPlutonium();
+  if (game.user.isGM && game.modules.get("plutonium")?.active && repairPlutoniumSiteUrl()) {
+    const go = await foundry.applications.api.DialogV2.confirm({
+      window: { title: "Compendium Library: Plutonium fixed" },
+      content: `<p>Plutonium's 5e.tools address pointed at <code>localhost</code>, which only works on your own computer, so players couldn't import anything from the library. It now points at this server's copy for everyone.</p><p>Reload now? Players who are already connected should reload too (F5).</p>`,
+    });
+    if (go) window.location.reload();
+  }
   // first run with Plutonium: offer to point it at the local 5e.tools copy
   if (game.user.isGM && game.modules.get("plutonium")?.active && !game.settings.get(MODULE_ID, "plutoniumDone") && !plutoniumConfigured()) {
     try {

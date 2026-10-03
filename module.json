@@ -2,7 +2,7 @@
   "id": "compendium-library",
   "title": "Compendium Library",
   "description": "<p>One searchable library for every spell, item, feat, class option and creature in your compendiums: system packs, module packs (including older-edition conversions) and world items, plus a 5e.tools copy in your Data folder if you have one (imported through Plutonium on drop). Filter by source, edition, level, school, class list, rarity, type, CR, size and more; favourites, recents, collections and tags. Drag anything onto a character sheet, the canvas, the sidebar or a compendium.</p>",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "authors": [
     {
       "name": "Charlie Suits"
@@ -35,7 +35,7 @@
   ],
   "url": "https://github.com/charliesuits/foundry-compendium-library",
   "manifest": "https://github.com/charliesuits/foundry-compendium-library/releases/latest/download/module.json",
-  "download": "https://github.com/charliesuits/foundry-compendium-library/releases/download/v1.2.1/module.zip",
+  "download": "https://github.com/charliesuits/foundry-compendium-library/releases/download/v1.2.2/module.zip",
   "bugs": "https://github.com/charliesuits/foundry-compendium-library/issues",
   "readme": "https://github.com/charliesuits/foundry-compendium-library#readme",
   "license": "LICENSE"

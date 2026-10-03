@@ -356,24 +356,43 @@ export async function buildVtIndexNow(progress) {
     await FP.upload("data", VT_INDEX_DIR, new File([JSON.stringify(idx)], VT_INDEX_FILE, { type: "application/json" }), {}, { notify: false });
   }
   _vtIndex = idx;
+  _brewFiles = null;
   return idx;
 }
+let _vtIndexLoading = null;
 async function loadVtIndex(progress) {
   if (_vtIndex) return _vtIndex;
-  const saved = await fetchJson(`${VT_INDEX_DIR}/${VT_INDEX_FILE}`);
-  if (!game.user.isGM) return (_vtIndex = saved);
-  const sig = await vtSignature();
-  if (!sig) return (_vtIndex = saved);          // no copy in the Data folder: use what was built before, if anything
-  if (saved?.sig === sig) return (_vtIndex = saved);
-  try {
-    progress?.("Building the 5e.tools list (first time only)…");
-    return await buildVtIndexNow(progress);
-  } catch (e) {
-    console.warn(`${MODULE_ID} | could not build the 5e.tools list`, e);
-    return (_vtIndex = saved);
-  }
+  // One load at a time: several callers at once must share it, never start parallel builds.
+  _vtIndexLoading ??= (async () => {
+    const saved = await fetchJson(`${VT_INDEX_DIR}/${VT_INDEX_FILE}`);
+    if (!game.user.isGM) return (_vtIndex = saved);
+    const sig = await vtSignature();
+    if (!sig) return (_vtIndex = saved);          // no copy in the Data folder: use what was built before, if anything
+    if (saved?.sig === sig) return (_vtIndex = saved);
+    try {
+      progress?.("Building the 5e.tools list (first time only)…");
+      return await buildVtIndexNow(progress);
+    } catch (e) {
+      console.warn(`${MODULE_ID} | could not build the 5e.tools list`, e);
+      return (_vtIndex = saved);
+    }
+  })().finally(() => { _vtIndexLoading = null; });
+  return _vtIndexLoading;
 }
-export function forgetVtIndex() { _vtIndex = null; _brewFiles = null; }
+
+/**
+ * The 5e.tools list as it already exists — never builds it. Used by the Plutonium homebrew lookup, which
+ * Plutonium calls many times in a row (e.g. while its own windows open), so it must stay cheap: at most one
+ * download of the saved list per session, shared by every caller.
+ */
+let _vtIndexPeek = null;
+function peekVtIndex() {
+  if (_vtIndex) return Promise.resolve(_vtIndex);
+  if (_vtIndexLoading) return _vtIndexLoading;
+  _vtIndexPeek ??= fetchJson(`${VT_INDEX_DIR}/${VT_INDEX_FILE}`).then((saved) => (_vtIndex ??= saved) ?? null);
+  return _vtIndexPeek;
+}
+export function forgetVtIndex() { _vtIndex = null; _brewFiles = null; _brewFilesP = null; _vtIndexPeek = null; }
 
 /* Homebrew/prerelease source id (lower-case) → its file in the local 5e.tools copy. */
 let _brewFiles = null;
@@ -384,25 +403,31 @@ let _brewFiles = null;
  */
 export async function localBrewUrl(source) {
   if (!source) return null;
-  if (!_brewFiles) {
-    const idx = await loadVtIndex();
-    const map = new Map();
-    if (idx?.rows) {
-      const K = Object.fromEntries(idx.keys.map((k, i) => [k, i]));
-      const val = (row, k) => { const v = row[K[k]]; return typeof v === "number" && idx.dict?.[k] ? idx.dict[k][v] : v; };
-      for (const row of idx.rows) {
-        const file = val(row, "f");
-        if (typeof file !== "string" || !/^(homebrew|prerelease)\//.test(file)) continue;
-        const src = String(val(row, "s") ?? "").toLowerCase();
-        if (src && !map.has(src)) map.set(src, file);
-      }
-    }
-    _brewFiles = map;
-  }
-  const file = _brewFiles.get(String(source).toLowerCase());
+  const files = await brewFiles();
+  const file = files?.get(String(source).toLowerCase());
   if (!file) return null;
   const path = `${vtRoot()}/${file}`.split("/").map(encodeURIComponent).join("/");
   return `${window.location.origin}${foundry.utils.getRoute(path)}`;
+}
+
+/** Built once and shared by every caller; rebuilt only after the 5e.tools list itself changes. */
+let _brewFilesP = null;
+function brewFiles() {
+  if (_brewFiles) return Promise.resolve(_brewFiles);
+  _brewFilesP ??= peekVtIndex().then((idx) => {
+    if (!idx?.rows) return null;                 // no list yet: Plutonium falls back to its own lookup
+    const map = new Map();
+    const K = Object.fromEntries(idx.keys.map((k, i) => [k, i]));
+    const val = (row, k) => { const v = row[K[k]]; return typeof v === "number" && idx.dict?.[k] ? idx.dict[k][v] : v; };
+    for (const row of idx.rows) {
+      const file = val(row, "f");
+      if (typeof file !== "string" || !/^(homebrew|prerelease)\//.test(file)) continue;
+      const src = String(val(row, "s") ?? "").toLowerCase();
+      if (src && !map.has(src)) map.set(src, file);
+    }
+    return (_brewFiles = map);
+  }).finally(() => { _brewFilesP = null; });
+  return _brewFilesP;
 }
 
 async function index5etools(progress) {

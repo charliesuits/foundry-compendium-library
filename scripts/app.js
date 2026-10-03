@@ -3,6 +3,7 @@
  */
 import { MODULE_ID, getRecords, invalidate, loadUserData, dropPackCache, buildVtIndexNow, vtRoot } from "./data.js";
 import { LibraryView, plutoniumActive } from "./view.js";
+import { warmOnOpen } from "./prewarm.js";
 
 const HAM = foundry.applications.api.HandlebarsApplicationMixin(foundry.applications.api.ApplicationV2);
 
@@ -32,6 +33,7 @@ export class CompendiumLibrary extends HAM {
     this.view.render();
     this.addHeaderButtons();
     this.load();
+    if (!this._warmed) { this._warmed = true; warmOnOpen(); }
   }
 
   setPosition(pos) {

@@ -10,6 +10,7 @@ import {
   MODULE_ID, MODES, MODE_ORDER, RARITY_ORDER, userData, saveUserData, getVtEntry, metaLine,
 } from "./data.js";
 import { render5eEntry } from "./render5e.js";
+import { warmFor } from "./prewarm.js";
 
 const PAGE = 200;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -141,6 +142,11 @@ export class LibraryView {
       this.el.list.querySelectorAll("li.selected").forEach((x) => x.classList.remove("selected"));
       li.classList.add("selected");
       this.showDetail(this.byKey.get(li.dataset.key));
+    });
+    // Start loading Plutonium's data for an entry as soon as it's clicked or a drag begins.
+    this.el.list.addEventListener("pointerdown", (e) => {
+      const li = e.target.closest("li[data-key]");
+      if (li) warmFor(this.byKey.get(li.dataset.key));
     });
     this.el.list.addEventListener("dblclick", (e) => {
       const li = e.target.closest("li[data-key]");
@@ -302,6 +308,7 @@ export class LibraryView {
   // ───────────────────────────────── detail
   async showDetail(r) {
     if (!r) return;
+    warmFor(r);
     this._detailKey = r.key;
     const d = this.el.detail;
     const facts = [];
